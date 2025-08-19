@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Users
 } from 'lucide-react';
+import applicationService from '../../services/applicationService';
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -416,31 +417,42 @@ const ApplicationsList = () => {
     filterApplications();
   }, [applications, searchTerm, statusFilter]);
 
-  const fetchApplications = async () => {
-    try {
-      setLoading(true);
-      // TODO: Replace with actual API call
-      // const token = localStorage.getItem('authToken');
-      // const response = await fetch('/api/applications/user/list', {
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // });
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setApplications(mockApplications);
-      calculateStats(mockApplications);
-      setError('');
-    } catch (err) {
-      setError('Failed to fetch applications. Please try again.');
-      console.error('Error fetching applications:', err);
-    } finally {
-      setLoading(false);
+const fetchApplications = async () => {
+  try {
+    setLoading(true);
+    
+    // Load applications from localStorage for now
+    const savedApplications = localStorage.getItem('applications') || '[]';
+    const applications = JSON.parse(savedApplications);
+    
+    // Apply filters
+    let filteredApps = applications;
+    
+    if (statusFilter && statusFilter !== 'all') {
+      filteredApps = filteredApps.filter(app => app.status === statusFilter);
     }
-  };
+    
+    if (searchTerm) {
+      filteredApps = filteredApps.filter(app => 
+        app.personalInfo?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.personalInfo?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.personalInfo?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.applicationId?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    setApplications(filteredApps);
+    calculateStats(filteredApps);
+    
+  } catch (error) {
+    console.error('Error fetching applications:', error);
+    setError('Failed to load applications. Please try again.');
+    setApplications([]);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const calculateStats = (apps) => {
     const stats = {
@@ -478,67 +490,62 @@ const ApplicationsList = () => {
     setCurrentPage(1);
   };
 
-  const handleStatusUpdate = async (applicationId, newStatus, remark) => {
-    try {
-      // TODO: Replace with actual API call
-      // const token = localStorage.getItem('authToken');
-      // const response = await fetch(`/api/applications/${applicationId}/status`, {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify({ status: newStatus, remark })
-      // });
-
-      // Simulate API call
-      const updatedApplications = applications.map(app =>
-        app._id === applicationId
-          ? { ...app, status: newStatus, updatedAt: new Date().toISOString() }
-          : app
-      );
-
-      setApplications(updatedApplications);
-      calculateStats(updatedApplications);
-      
-      if (selectedApplication && selectedApplication._id === applicationId) {
-        setSelectedApplication({ ...selectedApplication, status: newStatus });
-      }
-
-      // Show success message (you can add a toast component here)
-      console.log('Status updated successfully');
-    } catch (error) {
-      console.error('Error updating status:', error);
-      setError('Failed to update status. Please try again.');
+const handleStatusUpdate = async (applicationId, newStatus, remarks) => {
+  try {
+    // Get current applications from localStorage
+    const savedApplications = localStorage.getItem('applications') || '[]';
+    const applications = JSON.parse(savedApplications);
+    
+    // Update the specific application
+    const updatedApplications = applications.map(app =>
+      app.applicationId === applicationId
+        ? { ...app, status: newStatus, currentRemarks: remarks, updatedAt: new Date().toISOString() }
+        : app
+    );
+    
+    // Save back to localStorage
+    localStorage.setItem('applications', JSON.stringify(updatedApplications));
+    
+    // Refresh the list
+    await fetchApplications();
+    
+    // Update selected application if it's open
+    if (selectedApplication && selectedApplication.applicationId === applicationId) {
+      setSelectedApplication({ ...selectedApplication, status: newStatus, currentRemarks: remarks });
     }
-  };
+    
+    alert('Application status updated successfully!');
+    
+  } catch (error) {
+    console.error('Error updating status:', error);
+    alert('Failed to update application status. Please try again.');
+  }
+};
 
   const handleViewDetails = (application) => {
     setSelectedApplication(application);
     setShowDetailModal(true);
   };
 
-  const handleBulkStatusUpdate = async (newStatus) => {
-    if (selectedApplications.length === 0) return;
+const handleBulkStatusUpdate = async (newStatus) => {
+  if (selectedApplications.length === 0) return;
 
-    try {
-      // TODO: Implement bulk status update API call
-      const updatedApplications = applications.map(app =>
-        selectedApplications.includes(app._id)
-          ? { ...app, status: newStatus, updatedAt: new Date().toISOString() }
-          : app
-      );
-
-      setApplications(updatedApplications);
-      calculateStats(updatedApplications);
-      setSelectedApplications([]);
-      
-      console.log('Bulk status update successful');
-    } catch (error) {
-      console.error('Error updating bulk status:', error);
-      setError('Failed to update status for selected applications.');
-    }
-  };
+  try {
+    await applicationService.bulkUpdateApplicationStatus(selectedApplications, newStatus);
+    
+    // Refresh the applications list
+    await fetchApplications();
+    
+    // Clear selected applications
+    setSelectedApplications([]);
+    
+    alert(`Successfully updated ${selectedApplications.length} applications to ${newStatus}`);
+    
+  } catch (error) {
+    console.error('Error updating bulk status:', error);
+    alert('Failed to update status for selected applications. Please try again.');
+  }
+};
 
   const toggleApplicationSelection = (applicationId) => {
     setSelectedApplications(prev =>

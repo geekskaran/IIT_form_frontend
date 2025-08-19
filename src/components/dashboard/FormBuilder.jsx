@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import userService from '../../services/userService';
+
 import { 
   Settings, 
   Eye, 
@@ -24,36 +26,36 @@ const BannerUpload = ({ currentBanner, onBannerUpload, onBannerRemove }) => {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const handleFileSelect = (file) => {
-    if (!file) return;
+const handleFileSelect = async (file) => {
+  if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      alert('Please upload an image or PDF file');
-      return;
+  // Validate file using userService helper
+  const validation = userService.validateFile(file, 'image');
+  if (!validation.isValid) {
+    alert(validation.errors.join(', '));
+    return;
+  }
+
+  setUploading(true);
+  try {
+    // Use userService to upload advertisement
+    const response = await userService.uploadAdvertisement(file);
+    
+    if (response.success) {
+      onBannerUpload(response.advertisement);
+      
+      // Show success message
+      alert('Advertisement uploaded successfully!');
+    } else {
+      throw new Error(response.message || 'Upload failed');
     }
-
-    // Validate file size (5MB limit)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
-      return;
-    }
-
-    setUploading(true);
-    // Simulate upload - replace with actual API call
-    setTimeout(() => {
-      const mockBanner = {
-        filename: `banner_${Date.now()}.${file.name.split('.').pop()}`,
-        originalName: file.name,
-        size: file.size,
-        mimeType: file.type,
-        uploadDate: new Date().toISOString(),
-        path: URL.createObjectURL(file) // This would be the actual file URL from server
-      };
-      onBannerUpload(mockBanner);
-      setUploading(false);
-    }, 2000);
-  };
+  } catch (error) {
+    console.error('Error uploading banner:', error);
+    alert(`Failed to upload banner: ${error.message}`);
+  } finally {
+    setUploading(false);
+  }
+};
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -386,75 +388,94 @@ const FormBuilder = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Get user data from localStorage (replace with context/auth)
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const formUrl = `${window.location.origin}/form/${user.userId || 'USER_123'}`;
+  const user = userService.getCurrentUser() || {};
+  const formUrl = userService.getUserFormUrl() || `${window.location.origin}/form/USER_123`;
+const handleQuickAction = (action) => {
+    switch (action) {
+      case 'applications':
+        window.location.href = '/dashboard/applications';
+        break;
+      case 'emails':
+        window.location.href = '/emails';
+        break;
+      case 'settings':
+        setActiveTab('basic');
+        break;
+      default:
+        break;
+    }
+  }
 
   useEffect(() => {
     loadFormConfig();
   }, []);
 
-  const loadFormConfig = async () => {
+
+//   useEffect(() => {
+//   if (formConfig.isActive) {
+//     loadAnalyticsData();
+//   }
+// }, [formConfig.isActive]);
+
+  useEffect(() => {
+  // Auto-save when there are changes (optional feature)
+  const autoSaveTimer = setTimeout(() => {
+    if (hasUnsavedChanges && !saving) {
+      // You can implement auto-save here if needed
+      console.log('Auto-save could be implemented here');
+    }
+  }, 30000); // Auto-save after 30 seconds of inactivity
+
+  return () => clearTimeout(autoSaveTimer);
+}, [hasUnsavedChanges, saving]);
+
+// 10. ADD form validation before saving (add this function)
+const validateFormConfig = () => {
+  const validation = userService.validateFormConfig(formConfig);
+  
+  if (!validation.isValid) {
+    // Show validation errors
+    const errorMessages = Object.values(validation.errors).join('\n');
+    alert(`Please fix the following errors:\n${errorMessages}`);
+    return false;
+  }
+  
+  return true;
+};
+
+const loadFormConfig = async () => {
     try {
-      // TODO: Replace with actual API call
-      // const token = localStorage.getItem('authToken');
-      // const response = await fetch('/api/users/form-config', {
-      //   headers: { 'Authorization': `Bearer ${token}` }
-      // });
-      
-      // Simulate API call with mock data
-      const mockConfig = {
-        title: 'Research Position Application',
-        description: 'Apply for research positions in our university',
-        customHeadings: [
-          {
-            id: 1,
-            text: 'Welcome to our Research Program',
-            position: 'top'
-          }
-        ],
-        advertisement: null,
-        isActive: true
-      };
-      
-      setFormConfig(mockConfig);
+      const savedConfig = localStorage.getItem('formConfig');
+      if (savedConfig) {
+        setFormConfig(JSON.parse(savedConfig));
+      } else {
+        const mockConfig = {
+          title: 'Research Position Application',
+          description: 'Apply for research positions in our university',
+          customHeadings: [],
+          advertisement: null,
+          isActive: true
+        };
+        setFormConfig(mockConfig);
+      }
     } catch (error) {
       console.error('Error loading form config:', error);
+      setFormConfig({
+        title: 'Application Form',
+        description: 'Please fill out this application form',
+        customHeadings: [],
+        advertisement: null,
+        isActive: true
+      });
     }
   };
 
-  const handleConfigChange = (field, value) => {
+const handleConfigChange = (field, value) => {
     setFormConfig(prev => ({ ...prev, [field]: value }));
     setHasUnsavedChanges(true);
   };
 
-  const handleSaveConfig = async () => {
-    setSaving(true);
-    try {
-      // TODO: Replace with actual API call
-      // const token = localStorage.getItem('authToken');
-      // const response = await fetch('/api/users/form-config', {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(formConfig)
-      // });
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setHasUnsavedChanges(false);
-      // Show success message (you can add a toast component here)
-      console.log('Form configuration saved successfully');
-    } catch (error) {
-      console.error('Error saving form config:', error);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addCustomHeading = () => {
+const addCustomHeading = () => {
     const newHeading = {
       id: Date.now(),
       text: 'New Heading',
@@ -464,10 +485,12 @@ const FormBuilder = () => {
       ...prev,
       customHeadings: [...prev.customHeadings, newHeading]
     }));
+    
     setHasUnsavedChanges(true);
   };
 
-  const updateCustomHeading = (id, updates) => {
+
+const updateCustomHeading = (id, updates) => {
     setFormConfig(prev => ({
       ...prev,
       customHeadings: prev.customHeadings.map(heading =>
@@ -477,7 +500,8 @@ const FormBuilder = () => {
     setHasUnsavedChanges(true);
   };
 
-  const deleteCustomHeading = (id) => {
+
+const deleteCustomHeading = (id) => {
     setFormConfig(prev => ({
       ...prev,
       customHeadings: prev.customHeadings.filter(heading => heading.id !== id)
@@ -490,16 +514,67 @@ const FormBuilder = () => {
     setHasUnsavedChanges(true);
   };
 
-  const handleBannerRemove = () => {
-    setFormConfig(prev => ({ ...prev, advertisement: null }));
-    setHasUnsavedChanges(true);
+const handleSaveConfig = async () => {
+    setSaving(true);
+    try {
+      // Simple validation
+      if (!formConfig.title || formConfig.title.trim().length < 3) {
+        alert('Please enter a form title (at least 3 characters)');
+        return;
+      }
+
+      localStorage.setItem('formConfig', JSON.stringify(formConfig));
+      setHasUnsavedChanges(false);
+      alert('Form configuration saved successfully!');
+    } catch (error) {
+      alert(`Failed to save: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const copyFormUrl = () => {
-    navigator.clipboard.writeText(formUrl);
-    // Show success message (you can add a toast component here)
-    console.log('Form URL copied to clipboard');
+
+
+//   const loadAnalyticsData = async () => {
+//   try {
+//     const analytics = await userService.getFormAnalytics();
+    
+//     // Update your analytics state with real data
+//     // You can create state variables for analytics if needed
+//     console.log('Analytics data:', analytics);
+//   } catch (error) {
+//     console.error('Error loading analytics:', error);
+//     // Keep using mock data (0 values) as fallback
+//   }
+// };
+
+const handleBannerRemove = () => {
+    setFormConfig(prev => ({ ...prev, advertisement: null }));
+    setHasUnsavedChanges(true);
+    alert('Advertisement removed successfully!');
   };
+
+const copyFormUrl = async () => {
+  try {
+    const result = await userService.copyFormLink();
+    
+    if (result.success) {
+      // Show success message - you can replace this with a toast notification
+      alert('Form URL copied to clipboard!');
+      console.log('Form URL copied to clipboard');
+    }
+  } catch (error) {
+    console.error('Error copying form URL:', error);
+    
+    // Fallback to manual copy
+    try {
+      await navigator.clipboard.writeText(formUrl);
+      alert('Form URL copied to clipboard!');
+    } catch (fallbackError) {
+      alert('Failed to copy URL. Please copy manually.');
+    }
+  }
+};
 
   const tabs = [
     { id: 'basic', label: 'Basic Settings', icon: Settings },
@@ -507,6 +582,26 @@ const FormBuilder = () => {
     { id: 'banner', label: 'Advertisement', icon: Image },
     { id: 'share', label: 'Share & Publish', icon: ExternalLink }
   ];
+
+
+
+  if (!user || !user.userId) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
+        <p className="text-gray-600 mb-4">Please log in to access the form builder.</p>
+        <button
+          onClick={() => window.location.href = '/login'}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Go to Login
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -856,35 +951,44 @@ const FormBuilder = () => {
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
                 
                 <div className="space-y-3">
-                  <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <Eye className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <span className="font-medium text-gray-900">View Applications</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
-                  </button>
+    <button 
+      onClick={() => handleQuickAction('applications')}
+      className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+    >
+      <div className="flex items-center space-x-3">
+        <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
+          <Eye className="h-4 w-4 text-blue-600" />
+        </div>
+        <span className="font-medium text-gray-900">View Applications</span>
+      </div>
+      <span className="text-gray-400">→</span>
+    </button>
                   
-                  <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <span className="text-green-600">📧</span>
-                      </div>
-                      <span className="font-medium text-gray-900">Email Templates</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
-                  </button>
+    <button 
+      onClick={() => handleQuickAction('emails')}
+      className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+    >
+      <div className="flex items-center space-x-3">
+        <div className="h-8 w-8 bg-green-100 rounded-lg flex items-center justify-center">
+          <span className="text-green-600">📧</span>
+        </div>
+        <span className="font-medium text-gray-900">Email Templates</span>
+      </div>
+      <span className="text-gray-400">→</span>
+    </button>
                   
-                  <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <Settings className="h-4 w-4 text-purple-600" />
-                      </div>
-                      <span className="font-medium text-gray-900">Form Settings</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
-                  </button>
+<button 
+      onClick={() => handleQuickAction('settings')}
+      className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+    >
+      <div className="flex items-center space-x-3">
+        <div className="h-8 w-8 bg-purple-100 rounded-lg flex items-center justify-center">
+          <Settings className="h-4 w-4 text-purple-600" />
+        </div>
+        <span className="font-medium text-gray-900">Form Settings</span>
+      </div>
+      <span className="text-gray-400">→</span>
+    </button>
                 </div>
               </div>
             </div>

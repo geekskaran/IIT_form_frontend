@@ -2,6 +2,7 @@
 // 2. src/components/layout/DashboardLayout.jsx
 // ===================================
 import React, { useState } from 'react';
+import authService from '../../services/authService';
 import { 
   Menu, 
   X, 
@@ -19,13 +20,21 @@ const DashboardLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Get user from localStorage (replace with your auth context)
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+ 
+const user = authService.getCurrentUser() || {};
+
   
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
+const handleLogout = async () => {
+  try {
+    await authService.logout();
     window.location.href = '/login';
-  };
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Force logout even if API call fails
+    authService.clearAuthData();
+    window.location.href = '/login';
+  }
+};
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },

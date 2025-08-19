@@ -1,5 +1,7 @@
 
 import React, { useState } from 'react';
+import applicationService from '../../services/applicationService';
+import { useParams } from 'react-router-dom';
 
 const ApplicationForm = () => {
   const [formData, setFormData] = useState({
@@ -61,6 +63,7 @@ const ApplicationForm = () => {
   const [applicationId, setApplicationId] = useState('');
   const [backendErrors, setBackendErrors] = useState([]);
   const [declarationAgreed, setDeclarationAgreed] = useState(false);
+  const { userId } = useParams();
 
   // File upload states
   const [publicationFile, setPublicationFile] = useState(null);
@@ -476,135 +479,61 @@ const trackFormSubmission = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async () => {
-    if (!validateForm()) {
-      return;
-    }
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  setIsSubmitting(true);
+  setErrors({});
 
-    setUploading(true);
-    setUploadProgress(0);
-    // Clear previous errors
-    setErrors({});
-
-    try {
-      // Create FormData for file upload
-      const formDataToSend = new FormData();
-
-      // Append all form fields
-      Object.keys(formData).forEach(key => {
-        if (key === 'educationalQualifications' || key === 'experience') {
-          formDataToSend.append(key, JSON.stringify(formData[key]));
-        } else {
-          formDataToSend.append(key, formData[key]);
-        }
-      });
-
-      // Append file if selected
-      if (publicationFile) {
-        formDataToSend.append('publicationDocument', publicationFile);
-      }
-
-      // Add email verification status
-      // Add email verification status
-      formDataToSend.append('emailVerified', 'true');
-      formDataToSend.append('declarationAgreed', declarationAgreed ? 'true' : 'false'); // ADD THIS LINE
-
-      const response = await fetch('https://test2.codevab.com/api/applications', {
-        method: 'POST',
-        body: formDataToSend
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setSubmitted(true);
-        setApplicationId(result.applicationId);
-        trackFormSubmission();
-        setUploadProgress(100);
-        alert(`Application submitted successfully! Application ID: ${result.applicationId}`);
-
-        // Scroll to top to show success message
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        // Clear any previous backend errors
-        setBackendErrors([]);
-
-        // Handle different types of backend errors
-        if (result.errors && Array.isArray(result.errors)) {
-          // Handle validation errors array
-          const backendErrors = {};
-          const errorList = [];
-
-          result.errors.forEach(error => {
-            if (error.field) {
-              // Map backend field names to frontend field names
-              let fieldName = error.field;
-
-              // Handle educational qualifications errors
-              if (error.field.includes('educationalQualifications')) {
-                const match = error.field.match(/educationalQualifications\.(\d+)\.(.+)/);
-                if (match) {
-                  const index = match[1];
-                  const field = match[2];
-                  fieldName = `education_${index}_${field}`;
-                }
-              }
-              backendErrors[fieldName] = error.message;
-              errorList.push({
-                field: error.field,
-                message: error.message
-              });
-            } else {
-              // Handle errors without field specification
-              errorList.push({
-                field: 'General',
-                message: error.message || error
-              });
-            }
-          });
-
-          setErrors(backendErrors);
-          setBackendErrors(errorList);
-
-        } else if (result.error) {
-          // Handle rate limiting and other specific errors
-          setBackendErrors([{
-            field: 'System',
-            message: result.error
-          }]);
-        } else if (result.message) {
-          // Handle general error messages
-          setBackendErrors([{
-            field: 'Error',
-            message: result.message
-          }]);
-        } else {
-          // Fallback for unknown error format
-          setBackendErrors([{
-            field: 'General',
-            message: 'An unexpected error occurred. Please try again.'
-          }]);
-        }
-
-        // Scroll to top to show errors
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } catch (error) {
-      console.error('Submission error:', error);
-
-      // Handle network or connection errors
-      setBackendErrors([{
-        field: 'Connection',
-        message: 'Unable to connect to server. Please check your internet connection and try again.'
-      }]);
-
-      // Scroll to top to show error
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } finally {
-      setUploading(false);
-      setUploadProgress(0);
-    }
-  };
+  try {
+    // Create application data
+    const applicationData = {
+      applicationId: 'APP_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      personalInfo,
+      education,
+      experience,
+      publicationDetails,
+      category,
+      status: 'submitted',
+      submittedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      userId: userId || 'USER_123' // Default user for now
+    };
+    
+    // Get existing applications from localStorage
+    const savedApplications = localStorage.getItem('applications') || '[]';
+    const applications = JSON.parse(savedApplications);
+    
+    // Add new application
+    applications.push(applicationData);
+    
+    // Save to localStorage
+    localStorage.setItem('applications', JSON.stringify(applications));
+    
+    alert('Application submitted successfully!');
+    setSubmissionSuccess(true);
+    
+    // Reset form
+    setPersonalInfo({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      gender: ''
+    });
+    setEducation([]);
+    setExperience([]);
+    setPublicationDetails('');
+    setCategory('');
+    setPublicationFile(null);
+    
+  } catch (error) {
+    console.error('Error submitting application:', error);
+    setErrors({ submit: 'Failed to submit application. Please try again.' });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-100 py-6">
